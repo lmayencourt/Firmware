@@ -41,6 +41,7 @@ px4_add_module(
 		devices/src/mtk.cpp
 		devices/src/ashtech.cpp
 		devices/src/ubx.cpp
+                devices/src/javad.cpp
 	DEPENDS
 		platforms__common
 	)

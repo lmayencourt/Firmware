@@ -85,12 +85,11 @@
 #include "devices/src/ubx.h"
 #include "devices/src/mtk.h"
 #include "devices/src/ashtech.h"
-
+#include "devices/src/javad.h"
 
 #define TIMEOUT_5HZ 500
 #define RATE_MEASUREMENT_PERIOD 5000000
 #define GPS_WAIT_BEFORE_READ	20		// ms, wait before reading to save read() calls
-
 
 /* class for dynamic allocation of satellite info data */
 class GPS_Sat_Info
@@ -122,7 +121,7 @@ private:
 	char				_port[20];					///< device / serial port path
 	volatile int			_task;						///< worker task
 	bool				_healthy;					///< flag to signal if the GPS is ok
-	bool				_baudrate_changed;				///< flag to signal that the baudrate with the GPS has changed
+    bool				_baudrate_changed;				///< flag to signal that the baudrate with the GPS has changed
 	bool				_mode_changed;					///< flag that the GPS mode has changed
 	bool        			_mode_auto;					///< if true, auto-detect which GPS is attached
 	gps_driver_mode_t		_mode;						///< current mode
@@ -143,7 +142,7 @@ private:
 
 	int _orb_inject_data_fd;
 
-	orb_advert_t _dump_communication_pub;			///< if non-null, dump communication
+    orb_advert_t _dump_communication_pub;			///< if non-null, dump communication
 	gps_dump_s *_dump_to_device;
 	gps_dump_s *_dump_from_device;
 
@@ -173,7 +172,7 @@ private:
 	void cmd_reset();
 
 	/**
-	 * Publish the gps struct
+     * Publish the gps struct
 	 */
 	void 				publish();
 
@@ -224,7 +223,7 @@ private:
 	 * @param len length of the message
 	 * @param msg_to_gps_device if true, this is a message sent to the gps device, otherwise it's from the device
 	 */
-	void dumpGpsData(uint8_t *data, size_t len, bool msg_to_gps_device);
+    void dumpGpsData(uint8_t *data, size_t len, bool msg_to_gps_device);
 
 	void initializeCommunicationDump();
 };
@@ -350,7 +349,7 @@ int GPS::callback(GPSCallbackType type, void *data1, int data2, void *user)
 
 			if (num_read > 0) {
 				gps->dumpGpsData((uint8_t *)data1, (size_t)num_read, false);
-			}
+            }
 
 			return num_read;
 		}
@@ -725,6 +724,10 @@ GPS::task_main()
 				_helper = new GPSDriverAshtech(&GPS::callback, this, &_report_gps_pos, _p_report_sat_info);
 				break;
 
+            case GPS_DRIVER_MODE_JAVAD:
+                _helper = new GPSDriverJavad(&GPS::callback, this, &_report_gps_pos, _p_report_sat_info);
+                break;
+
 			default:
 				break;
 			}
@@ -777,7 +780,7 @@ GPS::task_main()
 					/* measure update rate every 5 seconds */
 					if (hrt_absolute_time() - last_rate_measurement > RATE_MEASUREMENT_PERIOD) {
 						float dt = (float)((hrt_absolute_time() - last_rate_measurement)) / 1000000.0f;
-						_rate = last_rate_count / dt;
+                        _rate = last_rate_count / dt;
 						_rate_rtcm_injection = _last_rate_rtcm_injection_count / dt;
 						last_rate_measurement = hrt_absolute_time();
 						last_rate_count = 0;
@@ -826,13 +829,17 @@ GPS::task_main()
 					_mode = GPS_DRIVER_MODE_MTK;
 					break;
 
-				case GPS_DRIVER_MODE_MTK:
+                case GPS_DRIVER_MODE_MTK:
 					_mode = GPS_DRIVER_MODE_ASHTECH;
 					break;
 
 				case GPS_DRIVER_MODE_ASHTECH:
 					_mode = GPS_DRIVER_MODE_UBX;
 					break;
+
+                case GPS_DRIVER_MODE_JAVAD:
+                    _mode = GPS_DRIVER_MODE_JAVAD;
+                    break;
 
 				default:
 					break;
@@ -898,6 +905,10 @@ GPS::print_info()
 			PX4_WARN("protocol: ASHTECH");
 			break;
 
+        case GPS_DRIVER_MODE_JAVAD:
+            PX4_WARN("protocol: JAVAD");
+            break;
+
 		default:
 			break;
 		}
@@ -930,7 +941,7 @@ GPS::print_info()
 void
 GPS::publish()
 {
-	if (_gps_num == 1) {
+    if (_gps_num == 1) {
 		orb_publish_auto(ORB_ID(vehicle_gps_position), &_report_gps_pos_pub, &_report_gps_pos, &_gps_orb_instance,
 				 ORB_PRIO_DEFAULT);
 		is_gps1_advertised = true;
@@ -960,7 +971,6 @@ GPS::publishSatelliteInfo()
 namespace gps
 {
 
-
 void	start(const char *path, gps_driver_mode_t mode, GPSHelper::Interface interface, bool fake_gps,
 	      bool enable_sat_info, int gps_num);
 void	stop();
@@ -989,7 +999,7 @@ start(const char *path, gps_driver_mode_t mode, GPSHelper::Interface interface, 
 			g_dev[gps_num - 1] = nullptr;
 		}
 
-		PX4_ERR("start of GPS %i failed", gps_num);
+        PX4_ERR("start of GPS %i failed", gps_num);
 	}
 }
 
@@ -1063,7 +1073,7 @@ gps_main(int argc, char *argv[])
 	bool fake_gps = false;
 	bool enable_sat_info = false;
 	GPSHelper::Interface interface = GPSHelper::Interface::UART;
-	gps_driver_mode_t mode = GPS_DRIVER_MODE_NONE;
+gps_driver_mode_t mode = GPS_DRIVER_MODE_NONE;
 
 	if (argc < 2) {
 		goto out;
@@ -1130,7 +1140,10 @@ gps_main(int argc, char *argv[])
 
 					} else if (!strcmp(argv[mode_arg], "ash")) {
 						mode = GPS_DRIVER_MODE_ASHTECH;
-					}
+
+                    } else if (!strcmp(argv[mode_arg], "javad")) {
+                        mode = GPS_DRIVER_MODE_JAVAD;
+                    }
 				}
 			}
 		}
